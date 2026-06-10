@@ -11,7 +11,7 @@
 # and the sha256 to match the uploaded release asset.
 cask "hindsight" do
   version "0.1.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "e8a163317f6c7b4a49a4602c896a6c625e57e2200a965c5e1e90594596be1564"
 
   url "https://github.com/nicoloboschi/hindsight-desktop/releases/download/v#{version}/Hindsight_#{version}_aarch64.dmg"
   name "Hindsight"
