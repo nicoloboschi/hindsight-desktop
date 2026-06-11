@@ -25,7 +25,7 @@ cask "hindsight" do
   # auto-install it; core memory ops work without it.
   # depends_on formula: "node"
 
-  depends_on macos: ">= :catalina"
+  depends_on macos: :catalina
 
   app "Hindsight.app"
 
