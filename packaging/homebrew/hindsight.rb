@@ -10,8 +10,8 @@
 # (Tauri names the dmg per-arch, e.g. Hindsight_0.1.0_aarch64.dmg); update it
 # and the sha256 to match the uploaded release asset.
 cask "hindsight" do
-  version "0.1.0"
-  sha256 "e8a163317f6c7b4a49a4602c896a6c625e57e2200a965c5e1e90594596be1564"
+  version "0.1.1"
+  sha256 "b3dc302bd4ccf345e4243d9c17c46c049671ebba1e0f86e16497d16864053073"
 
   url "https://github.com/nicoloboschi/hindsight-desktop/releases/download/v#{version}/Hindsight_#{version}_aarch64.dmg"
   name "Hindsight"
