@@ -27,8 +27,6 @@ const ICON_STARTING: &[u8] = include_bytes!("../icons/tray-starting.png"); // am
 struct Ui {
     status: MenuItem<Wry>,
     start: MenuItem<Wry>,
-    stop: MenuItem<Wry>,
-    restart: MenuItem<Wry>,
 }
 
 fn main() {
@@ -48,14 +46,9 @@ fn main() {
                 let ui = Ui {
                     status: MenuItem::with_id(app, "status", "Checking…", false, none)?,
                     start: MenuItem::with_id(app, "start", "Start", true, none)?,
-                    stop: MenuItem::with_id(app, "stop", "Stop", false, none)?,
-                    restart: MenuItem::with_id(app, "restart", "Restart", false, none)?,
                 };
-                let open_ui_i =
-                    MenuItem::with_id(app, "open_ui", "Open Control Plane UI", true, none)?;
-                let open_cfg_i = MenuItem::with_id(app, "open_config", "Open Config", true, none)?;
-                let open_logs_i = MenuItem::with_id(app, "open_logs", "View Logs", true, none)?;
-                let docs_i = MenuItem::with_id(app, "docs", "Documentation", true, none)?;
+                let control_i =
+                    MenuItem::with_id(app, "control", "Open Control Center", true, none)?;
                 let quit_i = MenuItem::with_id(app, "quit", "Quit Hindsight Menu", true, none)?;
 
                 let menu = Menu::with_items(
@@ -63,14 +56,8 @@ fn main() {
                     &[
                         &ui.status,
                         &PredefinedMenuItem::separator(app)?,
-                        &open_ui_i,
-                        &open_cfg_i,
-                        &open_logs_i,
-                        &docs_i,
-                        &PredefinedMenuItem::separator(app)?,
                         &ui.start,
-                        &ui.stop,
-                        &ui.restart,
+                        &control_i,
                         &PredefinedMenuItem::separator(app)?,
                         &quit_i,
                     ],
@@ -80,7 +67,9 @@ fn main() {
                 let menu_starting = starting.clone();
                 TrayIconBuilder::with_id("main")
                     .icon(Image::from_bytes(ICON_OFF)?)
-                    .icon_as_template(false)
+                    // Template = macOS renders the alpha mask white on dark menu
+                    // bars / black on light ones. Status is shown via opacity.
+                    .icon_as_template(true)
                     .tooltip("Hindsight")
                     .menu(&menu)
                     .show_menu_on_left_click(true)
@@ -102,38 +91,20 @@ fn on_menu_event(app: &AppHandle, id: &str, ui: &Ui, starting: &Arc<AtomicBool>)
     match id {
         // Lifecycle calls can block (uvx download, model load), so never run
         // them on the menu/main thread.
-        "open_ui" => {
-            std::thread::spawn(supervisor::open_ui);
-        }
-        "open_config" => {
-            std::thread::spawn(supervisor::open_config);
-        }
-        "open_logs" => {
-            std::thread::spawn(supervisor::open_logs);
-        }
-        "docs" => supervisor::open_docs(),
-        "start" | "restart" => {
+        "start" => {
             // Paint "starting…" immediately (we're on the main thread here), then
             // run the blocking start off-thread; the poll loop repaints when it
             // finishes or /health comes up.
             starting.store(true, Ordering::SeqCst);
             render(app, ui, false, true, None);
             let starting = starting.clone();
-            let restart = id == "restart";
             std::thread::spawn(move || {
-                if restart {
-                    supervisor::daemon_restart();
-                } else {
-                    supervisor::daemon_start();
-                }
+                supervisor::daemon_start();
                 starting.store(false, Ordering::SeqCst);
             });
         }
-        "stop" => {
-            starting.store(false, Ordering::SeqCst);
-            std::thread::spawn(|| {
-                supervisor::daemon_stop();
-            });
+        "control" => {
+            std::thread::spawn(supervisor::open_control_center);
         }
         "quit" => app.exit(0),
         _ => {}
@@ -156,8 +127,6 @@ fn render(app: &AppHandle, ui: &Ui, up: bool, starting: bool, version: Option<&s
     };
     let _ = ui.status.set_text(&label);
     let _ = ui.start.set_enabled(!up && !starting);
-    let _ = ui.stop.set_enabled(up);
-    let _ = ui.restart.set_enabled(up);
     if let Some(tray) = app.tray_by_id("main") {
         if let Ok(img) = Image::from_bytes(icon) {
             let _ = tray.set_icon(Some(img));

@@ -7,17 +7,19 @@ the `hindsight-embed` CLI and reads liveness from the daemon's `/health`.
 
 ## What it does
 
-The tray menu shows, at a glance:
+It runs under a dedicated embed profile (`desktop`, pinned to port 8899) and the
+tray menu has just two actions — everything else (LLM/profile config, `.env`
+editing, stop/restart, control-plane UI, ports, logs) lives in hindsight-embed's
+**control center**:
 
-- **Status** — `● Hindsight — running (:8888)` or `○ stopped`, refreshed every
-  3s by polling `http://127.0.0.1:8888/health`. The tray icon turns green/grey.
-- **Open Control Plane UI** — ensures the UI is up (`hindsight-embed ui start`)
-  and opens `http://127.0.0.1:18888` (embed's UI = daemon port + 10000).
-- **Open Config** — opens `~/.hindsight/embed` (the default-profile config).
-- **View Logs** — opens `~/.hindsight/daemon.log`.
-- **Start / Stop / Restart** — Start launches the daemon with
-  `HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT=0`, which disables the 5-minute idle
-  auto-exit so the instance stays *always running*.
+- **Status** — `● Hindsight — running (:8899) · API v…` or `○ stopped`, refreshed
+  every 3s by polling `/health`. The menu-bar icon is the Hindsight logo (white
+  template): full when running, dimmed when stopped/starting.
+- **Start** — launches the daemon with `HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT=0`,
+  which disables the 5-minute idle auto-exit so the instance stays *always
+  running*. Greyed out while running.
+- **Open Control Center** — runs `hindsight-embed control start`, which opens the
+  bundled localhost web app (profile config, supervision, logs, health).
 - **Quit** — quits the menu-bar app only; the daemon keeps running.
 
 ## Install (end users)

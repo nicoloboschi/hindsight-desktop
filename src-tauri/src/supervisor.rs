@@ -1,38 +1,33 @@
 //! Drives a local Hindsight instance through the `hindsight-embed` CLI.
 //!
-//! The desktop app is a thin supervisor: it never talks to the memory engine
-//! directly. Lifecycle (start/stop/restart, UI) is delegated to `hindsight-embed`
-//! and liveness is read straight off the daemon's `/health` endpoint.
+//! The desktop app is a thin supervisor with two actions: **start** the daemon
+//! (always-on) and **open the control center**. Everything else — profile/LLM
+//! config, `.env` editing, stop/restart, control-plane UI, ports, log tail — now
+//! lives in hindsight-embed's bundled control center web app (`control start`),
+//! so the menu just launches it. Liveness is read off the daemon's `/health`.
 //!
-//! It runs everything under its own dedicated embed profile ([`PROFILE`]) pinned
-//! to a fixed port, so it never collides with the user's default profile or a
-//! separately-launched dev server on 8888. Config and logs therefore live under
-//! `~/.hindsight/profiles/<profile>.{env,log}`.
+//! It runs under its own dedicated embed profile ([`PROFILE`]) pinned to a fixed
+//! port, so it never collides with the user's default profile or a dev server.
 //!
 //! Nothing is bundled. To launch `hindsight-embed` the app prefers an installed
 //! binary (`HINDSIGHT_EMBED_BIN`, then well-known locations) and otherwise falls
-//! back to `uvx hindsight-embed`, which fetches it (and, on first run,
-//! `hindsight-api` + models) on demand. Child processes get an augmented PATH
-//! because Finder-launched apps inherit only a minimal one.
+//! back to `uvx hindsight-embed`. Child processes get an augmented PATH because
+//! Finder-launched apps inherit only a minimal one.
 
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Dedicated embed profile this app owns end-to-end.
 const PROFILE: &str = "desktop";
 /// Fixed daemon port for [`PROFILE`]. In the named-profile range (8889-9888) and
 /// clear of the default profile / dev server on 8888.
 pub const DAEMON_PORT: u16 = 8899;
-/// Control-plane UI port. hindsight-embed convention is `daemon_port + 10000`.
-pub const UI_PORT: u16 = DAEMON_PORT + 10_000;
 /// Package spec used with `uvx` when no installed binary is found.
 const EMBED_PKG: &str = "hindsight-embed";
-/// Configuration documentation opened by the "Documentation" menu item.
-const DOCS_URL: &str = "https://hindsight.vectorize.io/developer/configuration";
 
 /// Disables the daemon's idle auto-exit (`idle_timeout <= 0`) so it stays up.
 const ALWAYS_ON_ENV: (&str, &str) = ("HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT", "0");
@@ -91,109 +86,16 @@ pub fn daemon_start() -> bool {
     run_embed(&["daemon", "start"], &[ALWAYS_ON_ENV])
 }
 
-pub fn daemon_stop() -> bool {
-    run_embed(&["daemon", "stop"], &[])
-}
-
-pub fn daemon_restart() -> bool {
-    daemon_stop();
-    daemon_start()
-}
-
-/// Ensure the control-plane UI is up, then open it in the default browser.
-/// `ui start` can block for minutes on a cold first run, so it runs detached and
-/// we open the browser once the UI port is reachable (falling back to opening
-/// anyway after a bounded wait so the click always produces a window).
-pub fn open_ui() {
-    ensure_profile();
-    std::thread::spawn(|| {
-        run_embed(&["ui", "start"], &[]);
-    });
-    wait_for_port(UI_PORT, Duration::from_secs(45));
-    // Use localhost, not 127.0.0.1: the control plane has a 127.0.0.1-specific
-    // redirect loop, and localhost is the friendlier URL.
-    let _ = open::that(format!("http://localhost:{UI_PORT}"));
-}
-
-/// Open the profile's config file (creating the profile first so the file exists,
-/// and seeding a commented template if it's still blank).
-pub fn open_config() {
-    ensure_profile();
-    let cfg = config_path();
-    seed_config_if_empty(&cfg);
-    if cfg.exists() {
-        open_text(&cfg);
-    } else {
-        let _ = open::that(profiles_dir());
-    }
-}
-
-/// Open a text file in the user's default text editor. `.env`/`.log` files have
-/// no associated app on macOS, so a plain `open` fails ("no application claims
-/// the file") — `open -t` routes to the default text editor instead; if even
-/// that fails we reveal the file in the file manager.
-fn open_text(path: &Path) {
-    #[cfg(target_os = "macos")]
-    {
-        let opened = Command::new("open")
-            .arg("-t")
-            .arg(path)
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if opened {
-            return;
-        }
-        let _ = Command::new("open").arg("-R").arg(path).status();
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        if open::that(path).is_err() {
-            if let Some(dir) = path.parent() {
-                let _ = open::that(dir);
-            }
-        }
-    }
-}
-
-/// Write a starter template into the profile config when it has no real content,
-/// so the user knows what to fill in. `#` lines are ignored by hindsight-embed.
-fn seed_config_if_empty(cfg: &std::path::Path) {
-    let blank = match std::fs::read_to_string(cfg) {
-        Ok(contents) => contents.trim().is_empty(),
-        Err(_) => true,
-    };
-    if !blank {
-        return;
-    }
-    let template = "\
-# Hindsight desktop profile — add your LLM provider + key, then Start (or
-# Restart) from the menu. Lines starting with '#' are ignored.
-HINDSIGHT_API_LLM_PROVIDER=openai
-HINDSIGHT_API_LLM_API_KEY=
-# HINDSIGHT_API_LLM_MODEL=gpt-4o-mini
-HINDSIGHT_EMBED_BANK_ID=default
-";
-    let _ = std::fs::write(cfg, template);
-}
-
-/// Open the configuration documentation in the default browser.
-pub fn open_docs() {
-    let _ = open::that(DOCS_URL);
-}
-
-/// Open the daemon log file (or the profiles dir if no log exists yet).
-pub fn open_logs() {
-    let log = log_path();
-    if log.exists() {
-        open_text(&log);
-    } else {
-        let _ = open::that(profiles_dir());
-    }
+/// Open hindsight-embed's control center web app in the browser. It runs as its
+/// own detached process and `control start` is idempotent + opens the browser
+/// itself, so we just invoke it. Blocking until the server is ready — call from
+/// a background thread.
+pub fn open_control_center() {
+    run_embed(&["control", "start"], &[]);
 }
 
 /// Create the dedicated profile if absent; `--merge` makes this idempotent and
-/// preserves any LLM key the user has already set via "Open Config".
+/// preserves any config the user has set via the control center.
 fn ensure_profile() {
     let port = DAEMON_PORT.to_string();
     run_embed(
@@ -202,37 +104,8 @@ fn ensure_profile() {
     );
 }
 
-fn config_path() -> PathBuf {
-    profiles_dir().join(format!("{PROFILE}.env"))
-}
-
-fn log_path() -> PathBuf {
-    profiles_dir().join(format!("{PROFILE}.log"))
-}
-
-fn profiles_dir() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".hindsight")
-        .join("profiles")
-}
-
 fn local(port: u16) -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], port))
-}
-
-/// Poll a localhost port until it accepts a connection or `max` elapses.
-fn wait_for_port(port: u16, max: Duration) -> bool {
-    let start = Instant::now();
-    loop {
-        if TcpStream::connect_timeout(&local(port), Duration::from_millis(800)).is_ok() {
-            return true;
-        }
-        if start.elapsed() >= max {
-            return false;
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    }
 }
 
 fn run_embed(args: &[&str], extra_env: &[(&str, &str)]) -> bool {
