@@ -28,6 +28,8 @@ const PROFILE: &str = "desktop";
 pub const DAEMON_PORT: u16 = 8899;
 /// Package spec used with `uvx` when no installed binary is found.
 const EMBED_PKG: &str = "hindsight-embed";
+/// Default control-center web-app port (overridable via HINDSIGHT_EMBED_CONTROL_PORT).
+const CONTROL_PORT_DEFAULT: u16 = 7878;
 
 /// Disables the daemon's idle auto-exit (`idle_timeout <= 0`) so it stays up.
 const ALWAYS_ON_ENV: (&str, &str) = ("HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT", "0");
@@ -86,12 +88,35 @@ pub fn daemon_start() -> bool {
     run_embed(&["daemon", "start"], &[ALWAYS_ON_ENV])
 }
 
-/// Open hindsight-embed's control center web app in the browser. It runs as its
-/// own detached process and `control start` is idempotent + opens the browser
-/// itself, so we just invoke it. Blocking until the server is ready — call from
-/// a background thread.
+/// Open hindsight-embed's control center deep-linked to our [`PROFILE`]. We start
+/// it with `--no-open` (idempotent; ensures the server + access token exist) and
+/// open the tokenized, profile-scoped URL ourselves, since the CLI's own browser
+/// open isn't profile-aware. Blocking until the server is ready — call from a
+/// background thread.
 pub fn open_control_center() {
-    run_embed(&["control", "start"], &[]);
+    run_embed(&["control", "start", "--no-open"], &[]);
+    let port = control_port();
+    let url = match control_token() {
+        Some(t) => format!("http://localhost:{port}/?token={t}&profile={PROFILE}"),
+        None => format!("http://localhost:{port}/?profile={PROFILE}"),
+    };
+    let _ = open::that(url);
+}
+
+/// Control-center port: `HINDSIGHT_EMBED_CONTROL_PORT` or the default 7878.
+fn control_port() -> u16 {
+    std::env::var("HINDSIGHT_EMBED_CONTROL_PORT")
+        .ok()
+        .and_then(|v| v.parse::<u16>().ok())
+        .filter(|p| *p >= 1024)
+        .unwrap_or(CONTROL_PORT_DEFAULT)
+}
+
+/// The control center's access token (persisted by `control start`), if present.
+fn control_token() -> Option<String> {
+    let path = dirs::home_dir()?.join(".hindsight").join("control.token");
+    let token = std::fs::read_to_string(path).ok()?.trim().to_string();
+    (!token.is_empty()).then_some(token)
 }
 
 /// Create the dedicated profile if absent; `--merge` makes this idempotent and
