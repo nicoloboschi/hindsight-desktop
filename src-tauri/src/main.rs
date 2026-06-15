@@ -38,10 +38,9 @@ fn main() {
         .setup({
             let starting = starting.clone();
             move |app| {
-                // No dock icon / app-switcher entry — this lives only in the menu bar.
-                #[cfg(target_os = "macos")]
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
+                // Keep the Dock icon: the menu-bar icon can be hidden by the
+                // notch / menu-bar overflow, so the Dock is the reliable surface.
+                // Clicking it (RunEvent::Reopen) opens the control center.
                 let none = None::<&str>;
                 let ui = Ui {
                     status: MenuItem::with_id(app, "status", "Checking…", false, none)?,
@@ -79,12 +78,25 @@ fn main() {
                     .build(app)?;
 
                 spawn_status_loop(app.handle().clone(), ui, starting.clone());
+
+                // The control center should be up whenever the app is running.
+                std::thread::spawn(supervisor::ensure_control_center);
                 Ok(())
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building Hindsight menu-bar app")
-        .run(|_app, _event| {});
+        .run(|_app, event| match event {
+            // Dock icon clicked or app relaunched while running → show the
+            // controls (the control center), since the menu-bar icon may be
+            // hidden by the notch.
+            tauri::RunEvent::Reopen { .. } => {
+                std::thread::spawn(supervisor::open_control_center);
+            }
+            // Any exit path: tear down the daemon + control center.
+            tauri::RunEvent::Exit => supervisor::teardown(),
+            _ => {}
+        });
 }
 
 fn on_menu_event(app: &AppHandle, id: &str, ui: &Ui, starting: &Arc<AtomicBool>) {
@@ -106,7 +118,12 @@ fn on_menu_event(app: &AppHandle, id: &str, ui: &Ui, starting: &Arc<AtomicBool>)
         "control" => {
             std::thread::spawn(supervisor::open_control_center);
         }
-        "quit" => app.exit(0),
+        "quit" => {
+            // Teardown happens in RunEvent::Exit so every quit path (this item,
+            // Dock → Quit, Cmd-Q, logout) tears down the daemon + control center.
+            let _ = ui.status.set_text("○ Hindsight — shutting down…");
+            app.exit(0);
+        }
         _ => {}
     }
 }

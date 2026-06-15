@@ -89,19 +89,32 @@ pub fn daemon_start() -> bool {
     run_embed(&["daemon", "start"], &[ALWAYS_ON_ENV])
 }
 
-/// Open hindsight-embed's control center deep-linked to our [`PROFILE`]. We start
-/// it with `--no-open` (idempotent; ensures the server + access token exist) and
-/// open the tokenized, profile-scoped URL ourselves, since the CLI's own browser
-/// open isn't profile-aware. Blocking until the server is ready — call from a
+/// Ensure the control center is running without opening a browser. Idempotent;
+/// best-effort. Called on app launch so the control center is always up while the
+/// menu-bar app runs. Blocking — call from a background thread.
+pub fn ensure_control_center() {
+    run_embed(&["control", "start", "--no-open"], &[]);
+}
+
+/// Open hindsight-embed's control center deep-linked to our [`PROFILE`]. Ensures
+/// it's running, then opens the tokenized, profile-scoped URL ourselves (the
+/// CLI's own browser open isn't profile-aware). Blocking — call from a
 /// background thread.
 pub fn open_control_center() {
-    run_embed(&["control", "start", "--no-open"], &[]);
+    ensure_control_center();
     let port = control_port();
     let url = match control_token() {
         Some(t) => format!("http://localhost:{port}/?token={t}&profile={PROFILE}"),
         None => format!("http://localhost:{port}/?profile={PROFILE}"),
     };
     let _ = open::that(url);
+}
+
+/// Tear down everything this app supervises: the daemon and the control center.
+/// Called on Quit so nothing is left running once the menu-bar app is gone.
+pub fn teardown() {
+    run_embed(&["daemon", "stop"], &[]);
+    run_embed(&["control", "stop"], &[]);
 }
 
 /// Control-center port: `HINDSIGHT_EMBED_CONTROL_PORT` or the default 7878.

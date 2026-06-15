@@ -7,20 +7,22 @@ the `hindsight-embed` CLI and reads liveness from the daemon's `/health`.
 
 ## What it does
 
-It runs under a dedicated embed profile (`desktop`, pinned to port 8899) and the
-tray menu has just two actions — everything else (LLM/profile config, `.env`
-editing, stop/restart, control-plane UI, ports, logs) lives in hindsight-embed's
-**control center**:
+It runs under a dedicated embed profile (`desktop`, pinned to port 8899). It lives
+in both the **Dock** and the **menu bar** — the Dock icon is the reliable surface
+(the menu-bar icon can be hidden by a notch / a full menu bar). Everything beyond
+start/open (LLM/profile config, `.env` editing, stop/restart, control-plane UI,
+ports, logs) lives in hindsight-embed's **control center**:
 
-- **Status** — `● Hindsight — running (:8899) · API v…` or `○ stopped`, refreshed
-  every 3s by polling `/health`. The menu-bar icon is the Hindsight logo (white
-  template): full when running, dimmed when stopped/starting.
-- **Start** — launches the daemon with `HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT=0`,
-  which disables the 5-minute idle auto-exit so the instance stays *always
-  running*. Greyed out while running.
-- **Open Control Center** — runs `hindsight-embed control start`, which opens the
-  bundled localhost web app (profile config, supervision, logs, health).
-- **Quit** — quits the menu-bar app only; the daemon keeps running.
+- **Click the Dock icon** (or relaunch the app) → opens the **control center**
+  deep-linked to the `desktop` profile. This is the main entry point.
+- **Menu-bar icon** — the Hindsight logo (white template, dims when stopped),
+  with a small menu:
+  - **Status** — `● running (:8899) · API v…` / `○ stopped`, polled every 3s.
+  - **Start** — launches the daemon with `HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT=0`
+    (no idle auto-exit, so it stays *always running* while the app runs).
+  - **Open Control Center** — same as clicking the Dock icon.
+- **Quit** (menu item, Dock → Quit, or Cmd-Q) → tears down the daemon **and** the
+  control center. The control center is auto-started whenever the app launches.
 
 ## Install (end users)
 

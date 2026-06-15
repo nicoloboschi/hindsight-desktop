@@ -1,6 +1,6 @@
 [package]
 name = "hindsight-desktop"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "Menu-bar supervisor for a local Hindsight (hindsight-embed) instance"
 license = "Apache-2.0"
