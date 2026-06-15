@@ -18,9 +18,9 @@ ports, logs) lives in hindsight-embed's **control center**:
 - **Menu-bar icon** — the Hindsight logo (white template, dims when stopped),
   with a small menu:
   - **Status** — `● running (:8899) · API v…` / `○ stopped`, polled every 3s.
-  - **Start** — launches the daemon with `HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT=0`
-    (no idle auto-exit, so it stays *always running* while the app runs).
   - **Open Control Center** — same as clicking the Dock icon.
+
+  Starting/stopping the daemon is done in the control center, not the menu.
 - **Quit** (menu item, Dock → Quit, or Cmd-Q) → tears down the daemon **and** the
   control center. The control center is auto-started whenever the app launches.
 

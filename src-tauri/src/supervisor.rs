@@ -32,9 +32,6 @@ const EMBED_PKG: &str = "hindsight-embed>=0.8.2";
 /// Default control-center web-app port (overridable via HINDSIGHT_EMBED_CONTROL_PORT).
 const CONTROL_PORT_DEFAULT: u16 = 7878;
 
-/// Disables the daemon's idle auto-exit (`idle_timeout <= 0`) so it stays up.
-const ALWAYS_ON_ENV: (&str, &str) = ("HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT", "0");
-
 /// True when the daemon answers `GET /health` with a 200 on [`DAEMON_PORT`].
 pub fn health_ok() -> bool {
     let timeout = Duration::from_millis(1500);
@@ -79,14 +76,6 @@ fn http_get_raw(port: u16, path: &str) -> Option<String> {
     let mut buf = Vec::new();
     stream.read_to_end(&mut buf).ok()?;
     Some(String::from_utf8_lossy(&buf).into_owned())
-}
-
-/// Start the daemon with auto-exit disabled. Blocking: the first run can take
-/// 1-3 minutes while `uvx` fetches hindsight-api and loads models — call from a
-/// background thread, never the menu-event (main) thread.
-pub fn daemon_start() -> bool {
-    ensure_profile();
-    run_embed(&["daemon", "start"], &[ALWAYS_ON_ENV])
 }
 
 /// Ensure the control center is running without opening a browser. Idempotent;
@@ -134,8 +123,9 @@ fn control_token() -> Option<String> {
 }
 
 /// Create the dedicated profile if absent; `--merge` makes this idempotent and
-/// preserves any config the user has set via the control center.
-fn ensure_profile() {
+/// preserves any config the user has set via the control center. Called on app
+/// startup so the profile exists for the deep-link and the health poll.
+pub fn ensure_profile() {
     let port = DAEMON_PORT.to_string();
     run_embed(
         &["profile", "create", PROFILE, "--port", &port, "--merge"],
