@@ -26,8 +26,9 @@ const PROFILE: &str = "desktop";
 /// Fixed daemon port for [`PROFILE`]. In the named-profile range (8889-9888) and
 /// clear of the default profile / dev server on 8888.
 pub const DAEMON_PORT: u16 = 8899;
-/// Package spec used with `uvx` when no installed binary is found.
-const EMBED_PKG: &str = "hindsight-embed";
+/// Package spec used with `uvx` when no installed binary is found. Pinned to the
+/// first release with the control center (`control` subcommand).
+const EMBED_PKG: &str = "hindsight-embed>=0.8.2";
 /// Default control-center web-app port (overridable via HINDSIGHT_EMBED_CONTROL_PORT).
 const CONTROL_PORT_DEFAULT: u16 = 7878;
 

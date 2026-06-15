@@ -34,10 +34,11 @@ bundled — on first **Start** the app runs `uvx hindsight-embed`, which fetches
 
 ## Requirements
 
-- `uv`/`uvx` available — the app runs `uvx hindsight-embed` when no installed
-  `hindsight-embed` is found. (The cask installs `uv` for you.)
-- Optional: an installed `hindsight-embed` is used if present; override with
-  `HINDSIGHT_EMBED_BIN=/path/to/hindsight-embed`.
+- `uv`/`uvx` available — the app runs `uvx 'hindsight-embed>=0.8.2'` when no
+  installed `hindsight-embed` is found. (The cask installs `uv` for you.) The
+  `>=0.8.2` floor guarantees the control center is present.
+- Optional: an installed `hindsight-embed` is used if present (must be `>=0.8.2`
+  for the control center); override with `HINDSIGHT_EMBED_BIN=/path/to/hindsight-embed`.
 - Optional: Node.js / `npx` for the Control Plane UI.
 
 ## Develop
