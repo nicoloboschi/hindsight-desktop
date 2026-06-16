@@ -9,10 +9,12 @@
 //! It runs under its own dedicated embed profile ([`PROFILE`]) pinned to a fixed
 //! port, so it never collides with the user's default profile or a dev server.
 //!
-//! Nothing is bundled. To launch `hindsight-embed` the app prefers an installed
-//! binary (`HINDSIGHT_EMBED_BIN`, then well-known locations) and otherwise falls
-//! back to `uvx hindsight-embed`. Child processes get an augmented PATH because
-//! Finder-launched apps inherit only a minimal one.
+//! Nothing is bundled. The app runs `uvx hindsight-embed@latest` so it always
+//! gets the newest published embed (with the control center) — it deliberately
+//! does NOT pick up a possibly-stale globally-installed `hindsight-embed`. Set
+//! `HINDSIGHT_EMBED_BIN` to force a specific binary (e.g. a dev/editable install).
+//! Child processes get an augmented PATH because Finder-launched apps inherit
+//! only a minimal one.
 
 use std::ffi::OsString;
 use std::io::{Read, Write};
@@ -26,9 +28,10 @@ const PROFILE: &str = "desktop";
 /// Fixed daemon port for [`PROFILE`]. In the named-profile range (8889-9888) and
 /// clear of the default profile / dev server on 8888.
 pub const DAEMON_PORT: u16 = 8899;
-/// Package spec used with `uvx` when no installed binary is found. Pinned to the
-/// first release with the control center (`control` subcommand).
-const EMBED_PKG: &str = "hindsight-embed>=0.8.2";
+/// Package spec for `uvx`: always the latest published hindsight-embed, so the
+/// control center is present. `@latest` re-checks the index and re-downloads
+/// only when a newer version exists.
+const EMBED_PKG: &str = "hindsight-embed@latest";
 /// Default control-center web-app port (overridable via HINDSIGHT_EMBED_CONTROL_PORT).
 const CONTROL_PORT_DEFAULT: u16 = 7878;
 
@@ -146,12 +149,12 @@ fn run_embed(args: &[&str], extra_env: &[(&str, &str)]) -> bool {
     matches!(cmd.output(), Ok(out) if out.status.success())
 }
 
-/// Build the base command that runs `hindsight-embed` under [`PROFILE`]: an
-/// installed binary if we can find one, otherwise `uvx hindsight-embed`. Always
-/// runs with an augmented PATH so `uvx`/`npx` (and the nested `uvx
-/// hindsight-api`) resolve even when the app was launched from Finder.
+/// Build the base command that runs hindsight-embed under [`PROFILE`]:
+/// `uvx hindsight-embed@latest` by default, or `HINDSIGHT_EMBED_BIN` if set.
+/// Always runs with an augmented PATH so `uvx`/`npx` (and the nested
+/// `uvx hindsight-api`) resolve even when the app was launched from Finder.
 fn embed_command() -> Command {
-    let mut cmd = match resolved_embed_bin() {
+    let mut cmd = match embed_bin_override() {
         Some(bin) => Command::new(bin),
         None => {
             let mut c = Command::new("uvx");
@@ -164,21 +167,14 @@ fn embed_command() -> Command {
     cmd
 }
 
-/// Locate an installed `hindsight-embed`. `None` means "fall back to uvx".
-fn resolved_embed_bin() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("HINDSIGHT_EMBED_BIN") {
-        if !p.is_empty() {
-            return Some(PathBuf::from(p));
-        }
+/// Explicit binary override via `HINDSIGHT_EMBED_BIN`. `None` (the default) means
+/// "use `uvx hindsight-embed@latest`" — we never auto-pick a globally-installed
+/// `hindsight-embed`, since a stale one can lack the control center.
+fn embed_bin_override() -> Option<PathBuf> {
+    match std::env::var("HINDSIGHT_EMBED_BIN") {
+        Ok(p) if !p.is_empty() => Some(PathBuf::from(p)),
+        _ => None,
     }
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Some(home) = dirs::home_dir() {
-        candidates.push(home.join(".local/bin/hindsight-embed"));
-        candidates.push(home.join(".pyenv/shims/hindsight-embed"));
-    }
-    candidates.push(PathBuf::from("/opt/homebrew/bin/hindsight-embed"));
-    candidates.push(PathBuf::from("/usr/local/bin/hindsight-embed"));
-    candidates.into_iter().find(|p| p.exists())
 }
 
 /// PATH for child processes: well-known install dirs prepended to the inherited
