@@ -26,17 +26,20 @@ cask "hindsight" do
 
   app "Hindsight.app"
 
-  # The app is ad-hoc signed (not yet notarized), so a quarantined copy trips
-  # Gatekeeper's "damaged" error. Tell users how to clear it.
+  # The app is ad-hoc signed (not notarized), so a quarantined copy trips
+  # Gatekeeper's "damaged" error. Clear the quarantine flag on install so the
+  # app opens with no warning. (Remove this once the app is notarized.)
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/Hindsight.app"],
+                   sudo: false
+  end
+
   caveats <<~EOS
-    Hindsight isn't notarized yet, so macOS may say it is
-    "damaged and can't be opened". To allow it, clear the quarantine flag:
+    Hindsight isn't notarized; this cask clears its quarantine flag on install
+    so it opens normally. If macOS ever still says it is "damaged", run:
 
       xattr -cr /Applications/Hindsight.app
-
-    then open Hindsight again. To avoid this at install time, run:
-
-      brew install --cask --no-quarantine nicoloboschi/tap/hindsight
   EOS
 
   # Only remove the app's own runtime artifacts on `brew uninstall --zap`.
